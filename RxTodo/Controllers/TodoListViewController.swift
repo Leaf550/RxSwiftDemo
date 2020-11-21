@@ -22,18 +22,60 @@ class TodoListViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         
+        loadTodoItems()
+        
+        tableView.contentInset = UIEdgeInsets(top: 0, left: 0, bottom: 150, right: 0)
+        
         todoItems.asObservable().subscribe(onNext: { [weak self] todos in
             self?.updateUI(todos: todos)
-        }).disposed(by: disposedBag)
+            self?.saveTodoItems()
+        })
+        .disposed(by: disposedBag)
     }
     
     private func updateUI(todos: [TodoItem]) {
         clearTodoButton.isEnabled = !todoItems.value.isEmpty
         addTodoButton.isEnabled = todos.filter { !$0.isFinished }.count < 5
-        self.tableView.reloadData()
+        self.tableView.reloadSections(IndexSet(integer: 0), with: .automatic)
     }
     
 }
+
+// MARK: - Segues
+
+extension TodoListViewController {
+    
+    override func prepare(for segue: UIStoryboardSegue, sender: Any?) {
+        
+        let navigationController = segue.destination as! UINavigationController
+        let detailVC = navigationController.topViewController as! TodoDetailViewController
+        
+        if segue.identifier == "AddTodo" {
+            detailVC.title = "Add Todo"
+            _ = detailVC.todoObservable.subscribe(onNext: { [weak self] item in
+                var newItems = self?.todoItems.value
+                newItems?.append(item)
+                self?.todoItems.accept(newItems!)
+            })
+
+        } else if segue.identifier == "EditTodo" {
+            detailVC.title = "Edit Todo"
+            
+            if let indexPath = tableView.indexPath(for: sender as! UITableViewCell) {
+                var newItems = self.todoItems.value
+                detailVC.todoItem = self.todoItems.value[indexPath.row]
+
+                _ = detailVC.todoObservable.subscribe(onNext: { [weak self] item in
+                    newItems[indexPath.row] = item
+                    self?.todoItems.accept(newItems)
+                })
+            }
+        }
+        
+    }
+    
+}
+
 
 // MARK: - Button
 extension TodoListViewController {
@@ -45,39 +87,7 @@ extension TodoListViewController {
     }
     
     @IBAction func clearTodos(_ sender: Any) {
-        todoItems.accept([TodoItem]())
-    }
-    
-}
-
-// MARK: - UITableViewDataSource
-extension TodoListViewController: UITableViewDataSource {
-    
-    func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        return todoItems.value.count
-    }
-    
-    func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        let cell = tableView.dequeueReusableCell(withIdentifier: "TodoCell", for: indexPath)
-        
-        let titleLabel = cell.viewWithTag(1002) as? UILabel
-        titleLabel?.text = todoItems.value[indexPath.row].name
-        
-        let finishedLabel = cell.viewWithTag(1001) as? UILabel
-        finishedLabel?.text = todoItems.value[indexPath.row].isFinished ? "✔️" : ""
-        
-        return cell
-    }
-    
-}
-
-// MARK: - UITableViewDelegate
-extension TodoListViewController: UITableViewDelegate {
-
-    func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
-        let todos = todoItems.value
-        todos[indexPath.row].isFinished = !todos[indexPath.row].isFinished
-        todoItems.accept(todos)
+        tableView.setEditing(!tableView.isEditing, animated: true)
     }
     
 }
